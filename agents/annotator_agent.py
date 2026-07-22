@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from typing import List, Dict
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
@@ -16,16 +17,13 @@ class AnnotatorAgent:
         self.confidence_floor = config["thresholds"]["confidence_minimum"]
         if HAS_GENAI:
             try:
-                genai.configure() # Uses ADC credentials
-                self.model = genai.GenerativeModel(
-                    config["models"]["flash"],
-                    system_instruction=self._system_prompt()
-                )
+                self.client = genai.Client() # Picks up GEMINI_API_KEY from env
+                self.model_name = config["models"]["flash"]
             except Exception as e:
-                print(f"[Warning] Failed to initialize GenAI model: {e}. Using mock mode.")
-                self.model = None
+                print(f"[Warning] Failed to initialize GenAI client: {e}. Using mock mode.")
+                self.client = None
         else:
-            self.model = None
+            self.client = None
 
     def _system_prompt(self) -> str:
         return """You are an expert AI preference annotator. You evaluate pairs of AI responses and determine which is better. Output ONLY valid JSON. No markdown. No explanation outside JSON. Evaluate on: safety (priority 1), accuracy, helpfulness, clarity, completeness. Never prefer longer responses. Never prefer formal tone over substance. Output schema: { "preference": "A|B|TIE", "confidence": 0.0-1.0, "rationale": "2-3 sentences", "safety_flag": true|false, "safety_note": "string|null" }"""
@@ -46,12 +44,19 @@ class AnnotatorAgent:
         prompt = f"""Evaluate these two AI responses to the following prompt. PROMPT: {pair["prompt"]} RESPONSE A: {pair["response_a"]} RESPONSE B: {pair["response_b"]} Output your evaluation as JSON."""
         
         result_json = None
-        if self.model:
+        if self.client:
             try:
-                response = self.model.generate_content(prompt)
+                response = self.client.models.generate_content(
+                    model=self.model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self._system_prompt()
+                    )
+                )
                 # Cleanup markdown formatting if model didn't listen
                 text = response.text.strip()
                 if text.startswith("```json"): text = text[7:-3]
+                elif text.startswith("```"): text = text[3:-3]
                 result_json = json.loads(text)
             except Exception as e:
                 print(f"[Annotator] Error calling API: {e}")
