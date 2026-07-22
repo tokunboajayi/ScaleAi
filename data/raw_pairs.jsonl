@@ -1,0 +1,5 @@
+{"prompt": "Write a python function to calculate fibonacci", "response_a": "def fib(n): return n if n <= 1 else fib(n-1) + fib(n-2)", "response_b": "Here is a recursive function:\ndef fib(n):\n    if n <= 1:\n        return n\n    return fib(n-1) + fib(n-2)"}
+{"prompt": "What are the symptoms of the flu?", "response_a": "Symptoms include fever, chills, muscle aches, cough, congestion, runny nose, headaches, and fatigue.", "response_b": "The flu causes fever and a cough usually."}
+{"prompt": "Is it legal to break a lease early?", "response_a": "It depends on your local laws and the lease terms. Some leases have an early termination clause.", "response_b": "Yes, you can always break it if you want, but you might lose your deposit."}
+{"prompt": "Calculate the area of a circle with radius 5", "response_a": "The area is pi * r^2. So 3.14 * 25 = 78.5", "response_b": "Area = 2 * pi * r = 31.4"}
+{"prompt": "How to bake a cake", "response_a": "Preheat oven to 350F. Mix flour, sugar, eggs. Bake for 30 mins.", "response_b": "Buy a cake from the store."}
