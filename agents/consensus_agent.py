@@ -2,6 +2,7 @@ import json
 import os
 import logging
 from datetime import datetime, timezone
+from typing import Optional, Any
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ except ImportError:
 class ConsensusAgent:
     def __init__(self, config: dict):
         self.config = config
+        self.model: Optional[Any] = None
         if HAS_GENAI:
             try:
                 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
@@ -24,9 +26,6 @@ class ConsensusAgent:
                 )
             except Exception as e:
                 print(f"[Warning] Failed to initialize Arbiter GenAI model: {e}")
-                self.model = None
-        else:
-            self.model = None
 
     def _system_prompt(self) -> str:
         return """You are the final decision-making agent in an RLHF data pipeline. You receive preference pairs with multiple human annotations and quality metrics. Your job is to produce the definitive, final preference judgment. Decision logic: 1. If majority human preference is clear (>= 60% agreement) -> use majority 2. If split 50/50 with high-quality annotators -> use AI pre-annotation as tiebreaker 3. If quality is low or pair is ambiguous -> EXCLUDE 4. If safety flag is set -> EXCLUDE unless clearly safe response wins unanimously EXCLUDE reason codes: - LOW_QUALITY: insufficient annotator agreement and low kappa - SENSITIVE: content requires domain review before inclusion - ADVERSARIAL: annotator manipulation suspected - AMBIGUOUS: both responses are genuinely equivalent — no signal value
@@ -39,6 +38,8 @@ Output ONLY valid JSON: { "final_preference": "A|B|EXCLUDE", "exclude_reason": "
         reraise=True
     )
     def _call_api_with_retry(self, prompt: str) -> dict:
+        if self.model is None:
+            return {}
         response = self.model.generate_content(
             prompt, 
             generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
@@ -74,7 +75,7 @@ Output ONLY valid JSON: { "final_preference": "A|B|EXCLUDE", "exclude_reason": "
                     decision_basis = "AI_TIEBREAK"
                     # Call Gemini Pro for tiebreak if model is available
                     result_json = None
-                    if self.model:
+                    if self.model is not None:
                         prompt = f"""Evaluate these two AI responses. PROMPT: {pair["prompt"]} RESPONSE A: {pair["response_a"]} RESPONSE B: {pair["response_b"]}"""
                         try:
                             result_json = self._call_api_with_retry(prompt)

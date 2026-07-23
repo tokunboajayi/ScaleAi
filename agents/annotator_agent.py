@@ -53,6 +53,8 @@ class AnnotatorAgent:
         reraise=True
     )
     def _call_api_with_retry(self, prompt: str) -> dict:
+        if self.model is None:
+            return {}
         response = self.model.generate_content(
             prompt, 
             generation_config=genai.types.GenerationConfig(response_mime_type="application/json") # type: ignore
