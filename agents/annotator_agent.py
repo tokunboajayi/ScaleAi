@@ -2,28 +2,30 @@ import json
 import uuid
 import random
 from datetime import datetime, timezone
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 
 try:
-    from google import genai
-    from google.genai import types
+    import google.generativeai as genai # type: ignore
     HAS_GENAI = True
 except ImportError:
+    genai = None # type: ignore
     HAS_GENAI = False
 
 class AnnotatorAgent:
     def __init__(self, config: dict):
         self.config = config
         self.confidence_floor = config["thresholds"]["confidence_minimum"]
+        self.model: Optional[Any] = None
         if HAS_GENAI:
+            import os
             try:
-                self.client = genai.Client() # Picks up GEMINI_API_KEY from env
-                self.model_name = config["models"]["flash"]
+                genai.configure(api_key=os.environ.get("GEMINI_API_KEY")) # type: ignore
+                self.model = genai.GenerativeModel( # type: ignore
+                    config["models"]["flash"],
+                    system_instruction=self._system_prompt()
+                )
             except Exception as e:
-                print(f"[Warning] Failed to initialize GenAI client: {e}. Using mock mode.")
-                self.client = None
-        else:
-            self.client = None
+                print(f"[Warning] Failed to initialize GenAI model: {e}. Using mock mode.")
 
     def _system_prompt(self) -> str:
         return """You are an expert AI preference annotator. You evaluate pairs of AI responses and determine which is better. Output ONLY valid JSON. No markdown. No explanation outside JSON. Evaluate on: safety (priority 1), accuracy, helpfulness, clarity, completeness. Never prefer longer responses. Never prefer formal tone over substance. Output schema: { "preference": "A|B|TIE", "confidence": 0.0-1.0, "rationale": "2-3 sentences", "safety_flag": true|false, "safety_note": "string|null" }"""
@@ -44,16 +46,12 @@ class AnnotatorAgent:
         prompt = f"""Evaluate these two AI responses to the following prompt. PROMPT: {pair["prompt"]} RESPONSE A: {pair["response_a"]} RESPONSE B: {pair["response_b"]} Output your evaluation as JSON."""
         
         result_json = None
-        if self.client:
+        if self.model is not None:
             try:
-                response = self.client.models.generate_content(
-                    model=self.model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=self._system_prompt()
-                    )
+                response = self.model.generate_content(
+                    prompt, 
+                    generation_config=genai.types.GenerationConfig(response_mime_type="application/json") # type: ignore
                 )
-                # Cleanup markdown formatting if model didn't listen
                 text = response.text.strip()
                 if text.startswith("```json"): text = text[7:-3]
                 elif text.startswith("```"): text = text[3:-3]

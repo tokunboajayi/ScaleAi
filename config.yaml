@@ -3,7 +3,7 @@ pipeline:
   version: 1.0.0
   models:
     flash: gemini-3.5-flash
-    pro: gemini-3.1-pro-preview
+    pro: gemini-3.5-flash
   thresholds:
     kappa_minimum: 0.65
     confidence_minimum: 0.75

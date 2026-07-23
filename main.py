@@ -10,8 +10,10 @@ from agents.annotator_agent import AnnotatorAgent
 from agents.quality_agent import QualityAgent
 from agents.consensus_agent import ConsensusAgent
 from utils.queue import PipelineQueue
+from dotenv import load_dotenv # type: ignore
 
 async def run_pipeline(input_path: str):
+    load_dotenv()
     print("--- Starting Antigravity RLHF Pipeline ---")
     with open("config.yaml") as f:
         config = yaml.safe_load(f)
