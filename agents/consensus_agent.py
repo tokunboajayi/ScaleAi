@@ -1,6 +1,10 @@
 import json
 import os
+import logging
 from datetime import datetime, timezone
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+
+logger = logging.getLogger(__name__)
 
 try:
     import google.generativeai as genai # type: ignore
@@ -28,8 +32,24 @@ class ConsensusAgent:
         return """You are the final decision-making agent in an RLHF data pipeline. You receive preference pairs with multiple human annotations and quality metrics. Your job is to produce the definitive, final preference judgment. Decision logic: 1. If majority human preference is clear (>= 60% agreement) -> use majority 2. If split 50/50 with high-quality annotators -> use AI pre-annotation as tiebreaker 3. If quality is low or pair is ambiguous -> EXCLUDE 4. If safety flag is set -> EXCLUDE unless clearly safe response wins unanimously EXCLUDE reason codes: - LOW_QUALITY: insufficient annotator agreement and low kappa - SENSITIVE: content requires domain review before inclusion - ADVERSARIAL: annotator manipulation suspected - AMBIGUOUS: both responses are genuinely equivalent — no signal value
 Output ONLY valid JSON: { "final_preference": "A|B|EXCLUDE", "exclude_reason": "LOW_QUALITY|SENSITIVE|ADVERSARIAL|AMBIGUOUS|null", "decision_basis": "MAJORITY|AI_TIEBREAK|ARBITER_JUDGMENT", "confidence": 0.0-1.0, "provenance": { "human_votes": {"A": 0, "B": 0, "TIE": 0}, "ai_preference": "A|B|TIE|null", "ai_confidence": 0.0 } }"""
 
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(5),
+        reraise=True
+    )
+    def _call_api_with_retry(self, prompt: str) -> dict:
+        response = self.model.generate_content(
+            prompt, 
+            generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
+        )
+        text = response.text.strip()
+        if text.startswith("```json"): text = text[7:-3]
+        elif text.startswith("```"): text = text[3:-3]
+        return json.loads(text)
+
     async def arbitrate(self, batches: list) -> list:
-        print(f"[Arbiter] Arbitrating {len(batches)} batches.")
+        logger.info(f"Arbitrating {len(batches)} batches.")
         final_pairs = []
         excluded_pairs = []
         
@@ -57,16 +77,9 @@ Output ONLY valid JSON: { "final_preference": "A|B|EXCLUDE", "exclude_reason": "
                     if self.model:
                         prompt = f"""Evaluate these two AI responses. PROMPT: {pair["prompt"]} RESPONSE A: {pair["response_a"]} RESPONSE B: {pair["response_b"]}"""
                         try:
-                            response = self.model.generate_content(
-                                prompt, 
-                                generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
-                            )
-                            text = response.text.strip()
-                            if text.startswith("```json"): text = text[7:-3]
-                            elif text.startswith("```"): text = text[3:-3]
-                            result_json = json.loads(text)
+                            result_json = self._call_api_with_retry(prompt)
                         except Exception as e:
-                            print(f"[Arbiter] API error during tiebreak: {e}")
+                            logger.error(f"API error during tiebreak after retries: {e}")
                     
                     if result_json:
                         final_pref = result_json.get("final_preference", "EXCLUDE")

@@ -1,9 +1,13 @@
 import json
 import uuid
 import random
+import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
+from google.api_core.exceptions import ResourceExhausted
 
+logger = logging.getLogger(__name__)
 try:
     import google.generativeai as genai # type: ignore
     HAS_GENAI = True
@@ -42,22 +46,31 @@ class AnnotatorAgent:
         print(f"[Annotator] Pre-annotation complete.")
         return results
 
+    @retry(
+        retry=retry_if_exception_type(Exception), # Catch all for demo, typically ResourceExhausted
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(5),
+        reraise=True
+    )
+    def _call_api_with_retry(self, prompt: str) -> dict:
+        response = self.model.generate_content(
+            prompt, 
+            generation_config=genai.types.GenerationConfig(response_mime_type="application/json") # type: ignore
+        )
+        text = response.text.strip()
+        if text.startswith("```json"): text = text[7:-3]
+        elif text.startswith("```"): text = text[3:-3]
+        return json.loads(text)
+
     async def _annotate_pair(self, pair: Dict) -> Dict:
         prompt = f"""Evaluate these two AI responses to the following prompt. PROMPT: {pair["prompt"]} RESPONSE A: {pair["response_a"]} RESPONSE B: {pair["response_b"]} Output your evaluation as JSON."""
         
         result_json = None
         if self.model is not None:
             try:
-                response = self.model.generate_content(
-                    prompt, 
-                    generation_config=genai.types.GenerationConfig(response_mime_type="application/json") # type: ignore
-                )
-                text = response.text.strip()
-                if text.startswith("```json"): text = text[7:-3]
-                elif text.startswith("```"): text = text[3:-3]
-                result_json = json.loads(text)
+                result_json = self._call_api_with_retry(prompt)
             except Exception as e:
-                print(f"[Annotator] Error calling API: {e}")
+                logger.error(f"Error calling API after retries: {e}")
         
         if not result_json:
             # Fallback mock mode

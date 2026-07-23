@@ -1,59 +1,93 @@
-# Scale AI RLHF Pipeline
+<div align="center">
+  
+  <a href="https://scale.com/">
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=40&duration=3000&pause=1000&color=663399&center=true&vCenter=true&width=800&height=100&lines=Scale+AI+RLHF+Pipeline;Enterprise-Grade+Data+Refinement;High-Throughput+Evaluation;Asynchronous+Agent+Architecture" alt="Typing SVG" />
+  </a>
 
-This repository contains an advanced pipeline designed for Reinforcement Learning from Human Feedback (RLHF) processing. It simulates a robust, multi-agent workflow to ingest, process, annotate, verify, and finalize text pairs to produce high-quality training data for LLMs.
+  <p align="center">
+    <b>A highly scalable, multi-agent AI pipeline for Reinforcement Learning from Human Feedback (RLHF).</b>
+  </p>
 
-## Overview
+  <p align="center">
+    <a href="https://github.com/tokunboajayi/ScaleAi"><img src="https://img.shields.io/badge/Scale%20AI-Enterprise%20Grade-blueviolet?style=for-the-badge&logo=scale" alt="Scale AI"></a>
+    <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python" alt="Python"></a>
+    <a href="https://github.com/tokunboajayi/ScaleAi/actions"><img src="https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge" alt="Build Status"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-gray?style=for-the-badge" alt="License"></a>
+  </p>
+</div>
 
-The Scale AI RLHF Pipeline employs a system of specialized AI agents, each handling a crucial step in the data refinement process. The architecture is modular and queue-based to handle large volumes of data efficiently.
+---
 
-The agents involved are:
+## 🚀 Overview
 
-1. **Ingestion Agent (`agents/ingestion_agent.py`)**: Reads the raw data, validates its schema, and batches it for processing.
-2. **Router Agent (`agents/router_agent.py`)**: Acts as a dispatcher, intelligently routing batched data to appropriate models or processing queues based on task complexity.
-3. **Annotator Agent (`agents/annotator_agent.py`)**: Uses AI models to generate high-quality responses or annotations for the input prompts. 
-4. **Quality Agent (`agents/quality_agent.py`)**: Acts as a reviewer to grade the annotated responses for helpfulness, harmlessness, and accuracy.
-5. **Consensus Agent (`agents/consensus_agent.py`)**: Acts as an arbiter to resolve disagreements and filter out low-quality annotations, ensuring only the best data makes it to the final dataset.
+The **Scale AI RLHF Pipeline** employs a system of specialized AI agents, each handling a crucial step in the data refinement process. The architecture is modular, fully asynchronous, and queue-based to handle massive volumes of data efficiently—built for **Enterprise Capacity and Scale**.
 
-## Setup and Installation
+### 🌟 Key Features
+- **Asynchronous Execution:** Built on `asyncio` and `aiohttp` for non-blocking, high-throughput I/O.
+- **Enterprise Fault Tolerance:** Implements robust exponential backoff (`tenacity`) to seamlessly handle API rate limits and `429 Quota Exceeded` errors.
+- **CLI & Telemetry:** Features a full Command Line Interface (`argparse`), dynamic progress bars (`tqdm`), and centralized logging (`logging`).
+- **Multi-Agent Consensus:** Uses advanced AI-driven tiebreaking alongside Cohen's Kappa scoring to ensure absolute data quality.
+
+---
+
+## 🧠 Architecture Overview
+
+The pipeline executes through a sequence of autonomous agents:
+
+```mermaid
+graph TD
+    A[Raw Data Ingestion] --> B{Router Agent}
+    B -->|High Complexity| C[Annotator Agent <br> <i>Gemini Flash / Pro</i>]
+    B -->|Standard| C
+    C --> D[Quality Agent]
+    D --> E[Consensus Arbiter]
+    E -->|Approved| F[(High Quality Pairs)]
+    E -->|Rejected| G[(Excluded Data Log)]
+```
+
+1. **Ingestion Agent**: Reads the raw data, validates its schema, and batches it for processing.
+2. **Router Agent**: Acts as a dispatcher, routing batched data to appropriate models.
+3. **Annotator Agent**: Uses AI models to generate high-quality responses/evaluations with automatic retry handling. 
+4. **Quality Agent**: Grades the annotated responses for helpfulness, harmlessness, and accuracy.
+5. **Consensus Agent**: Resolves disagreements and filters out low-quality data (e.g. `LOW_QUALITY`, `AMBIGUOUS`, `SENSITIVE`).
+
+---
+
+## 🛠️ Setup and Installation
 
 1. **Install Dependencies**:
-   Ensure you have Python 3 installed. Then, create a virtual environment and install the required packages:
+   Create a virtual environment and install the enterprise requirements:
    ```bash
    python -m venv .venv
-   # On Windows:
-   .venv\Scripts\activate
-   # On macOS/Linux:
-   source .venv/bin/activate
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    
    pip install -r requirements.txt
    ```
 
 2. **Configuration**:
-   - Update `config.yaml` to tweak pipeline parameters (e.g., batch sizes, model parameters).
-   - Set up your `.env` file with necessary API keys (like `GEMINI_API_KEY`) required for the agents to operate.
+   - Update `config.yaml` to tweak pipeline parameters (e.g., batch sizes, model thresholds).
+   - Set up your `.env` file with necessary API keys (like `GEMINI_API_KEY`).
 
-## How to Run
+---
 
-To run the pipeline and process a dataset, you can execute the `main.py` script and pass your JSONL file as an argument:
+## 💻 Usage
+
+Run the pipeline using the enterprise CLI. It features dynamic progress tracking and robust logging:
 
 ```bash
+# Basic run
 python main.py data/raw_pairs.jsonl
+
+# Specify custom output directory and enable debug logging
+python main.py data/raw_pairs.jsonl --output-dir custom_outputs --debug
 ```
 
-### Process Simulation
-
-Running `main.py` acts as a simulation of the full end-to-end RLHF pipeline:
-- The system reads `raw_pairs.jsonl`.
-- Data flows sequentially through the agents (Ingestion -> Router -> Annotator -> Quality -> Consensus).
-- Clean, verified pairs are outputted.
-
 ### Outputs
+- **`outputs/final_pairs.jsonl`**: The clean, high-quality, verified data ready for LLM training.
+- **`outputs/exclude_log.jsonl`**: A detailed log of all excluded pairs and the specific reasons for rejection.
+- **`pipeline.log`**: Standardized file log containing detailed execution metrics.
 
-After execution, the finalized, high-quality data is exported to the `outputs/` directory as `final_pairs.jsonl`. This data is ready to be used in RLHF training!
-
-## Directory Structure
-
-- `agents/`: Contains the logic for the different agents in the pipeline.
-- `data/`: Contains sample datasets (e.g., `raw_pairs.jsonl`).
-- `outputs/`: Destination for processed data files.
-- `utils/`: Helper scripts and utilities used across the pipeline (e.g., inter-rater reliability calculations like Cohen's Kappa).
+---
+<div align="center">
+  <i>Engineered for Scale AI. Built for the future of AI alignment.</i>
+</div>
