@@ -1,4 +1,8 @@
 {
     "venvPath": "c:\\Users\\RecoveryAdmin\\OneDrive\\Documents\\Scale Ai\\rlhf-pipeline",
-    "venv": ".venv"
+    "venv": ".venv",
+    "exclude": [
+        "**/__pyrefly_virtual__",
+        "c:/__pyrefly_virtual__"
+    ]
 }
